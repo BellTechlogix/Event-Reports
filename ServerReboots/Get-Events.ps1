@@ -1,8 +1,8 @@
 <#
-       ServerReboots-Reports.ps1
+       Get-Events.ps1
        Created By Kristopher Roy
-       Created On 20Feb18
-	   Updated On 22Feb18
+       Created On 02March18
+	   Updated On 
 #>
 
 #Functions Section
@@ -156,8 +156,11 @@ $OutPutSelection = MultipleSelectionBox -inputarray $outputoptions -listboxtype 
 $reportsizeoptions = "All","Last 1","Last 2","Last 3"
 $reportsizeSelection = MultipleSelectionBox -inputarray $reportsizeoptions -listboxtype One -label "How Many Events to Gather?:" -prompt "Report Size" -sizex 280 -sizey 180
 
+$reporttypeoptions = "Reboots","ManualInput"
+$reporttypeSelection = MultipleSelectionBox -inputarray $reporttypeoptions -listboxtype One -label "What Events Do You Wish to Gather?:" -prompt "Event Selection" -sizex 280 -sizey 180
+
 $getoptions = "AutoList","ManualInput"
-$GetSelection = MultipleSelectionBox -inputarray $getoptions -listboxtype One -label "Choose to Return an Auto List or Manual Input:" -prompt "Server Input Mode" -sizex 280 -sizey 180
+$GetSelection = MultipleSelectionBox -inputarray $getoptions -listboxtype One -label "Auto Machine List or Manually Input Machine Names:" -prompt "Server Input Mode" -sizex 295 -sizey 180
 
 #OutPut Selection Functionality
 IF($OutPutSelection -eq "File")
@@ -201,7 +204,7 @@ IF($GetSelection -eq "ManualInput")
               $title = 'Servers'
               $msg   = 'Enter your Server List Comma Seperated:'
               $ServerList = [Microsoft.VisualBasic.Interaction]::InputBox($msg, $title)
-        $Serverselections = $ServerList.Split(",")
+			  $Serverselections = $ServerList.Split(",")
        }
        IF($manualselection -eq "CSV/List")
        {$ServerSelections = (Import-Csv (Get-FileName) -header "Servers").servers}
@@ -211,33 +214,73 @@ write-host "Following Servers Selected "$ServerSelections
 
 $reportarray=@()
 
-Foreach($server in $serverSelections)
-{
-    write-host "gathering logs for $server"
-    If($reportsizeSelection -eq "All")
-	{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)}
-    If($reportsizeSelection -eq "Last 1")
-	{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 1}
-    If($reportsizeSelection -eq "Last 2")
-	{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 2}
-    If($reportsizeSelection -eq "Last 3")
-	{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 3}
+If($reporttypeSelection -eq "Reboots")
+{	
+	Foreach($server in $serverSelections)
+	{
+		write-host "gathering logs for $server"
+		If($reportsizeSelection -eq "All")
+		{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)}
+		If($reportsizeSelection -eq "Last 1")
+		{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 1}
+		If($reportsizeSelection -eq "Last 2")
+		{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 2}
+		If($reportsizeSelection -eq "Last 3")
+		{$details = (gwmi win32_ntlogevent -filter "LogFile='System' and EventCode='1074' and Message like '%restart%'" -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 3}
 
-    $count = 0
-    FOREACH($item in $details|where{$_ -ne $null})
-    {
-        $count++
-        write-host ("Adding Details to report item $count of "+$details.user.count+" for $server")
-        $rebootobject = new-object PSObject
-        $rebootobject | Add-Member NoteProperty -Name "Server" -Value $Server
-        $rebootobject | Add-Member NoteProperty -Name "User" -Value $item.User
-        $rebootobject | Add-Member NoteProperty -Name "Time" -Value $item.Time
-        $rebootobject | Add-Member NoteProperty -Name "Message" -Value $item.Message
-        $reportarray += $rebootobject
-        $rebootobject = $null
-        $item = $null
-    }
+		$count = 0
+		FOREACH($item in $details|where{$_ -ne $null})
+		{
+			$count++
+			write-host ("Adding Details to report item $count of "+$details.user.count+" for $server")
+			$rebootobject = new-object PSObject
+			$rebootobject | Add-Member NoteProperty -Name "Server" -Value $Server
+			$rebootobject | Add-Member NoteProperty -Name "User" -Value $item.User
+			$rebootobject | Add-Member NoteProperty -Name "Time" -Value $item.Time
+			$rebootobject | Add-Member NoteProperty -Name "Message" -Value $item.Message
+			$reportarray += $rebootobject
+			$rebootobject = $null
+			$item = $null
+		}
+	}
 }
+If($reporttypeSelection -eq "ManualInput")
+{	
+	[void][Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic')
+	$title = 'Event Filter'
+	$msg   = 'Modify the Pre-Typed Event String:'
+	$EventMSG = [Microsoft.VisualBasic.Interaction]::InputBox($msg, $title, "LogFile='System' and EventCode='1074' and Message like '%restart%'")
+	$EventSearch = $EventMSG
+	
+	Foreach($server in $serverSelections)
+	{
+		write-host "gathering logs for $server"
+		If($reportsizeSelection -eq "All")
+		{$details = (gwmi win32_ntlogevent -filter $EventSearch -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)}
+		If($reportsizeSelection -eq "Last 1")
+		{$details = (gwmi win32_ntlogevent -filter $EventSearch -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 1}
+		If($reportsizeSelection -eq "Last 2")
+		{$details = (gwmi win32_ntlogevent -filter $EventSearch -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 2}
+		If($reportsizeSelection -eq "Last 3")
+		{$details = (gwmi win32_ntlogevent -filter $EventSearch -ComputerName $server | select User,@{n="Time";e={$_.ConvertToDateTime($_.TimeGenerated)}},Message)|Sort Time|select -Last 3}
+
+		$count = 0
+		FOREACH($item in $details|where{$_ -ne $null})
+		{
+			$count++
+			write-host ("Adding Details to report item $count of "+$details.user.count+" for $server")
+			$eventobject = new-object PSObject
+			$eventobject | Add-Member NoteProperty -Name "Server" -Value $Server
+			$eventobject | Add-Member NoteProperty -Name "User" -Value $item.User
+			$eventobject | Add-Member NoteProperty -Name "Time" -Value $item.Time
+			$eventobject | Add-Member NoteProperty -Name "Message" -Value $item.Message
+			$reportarray += $eventobject
+			$eventobject = $null
+			$item = $null
+		}
+	}
+}
+
 
 $date = Get-Date -Format ddMMMyy-HHmm
 If($folder -ne $null)
